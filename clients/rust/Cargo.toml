@@ -1,0 +1,17 @@
+# a real matrix-sdk client used as the human counterparty in encrypted-room e2e tests: it logs in,
+# sends an ENCRYPTED message the bot decrypts, and decrypts the bot's ENCRYPTED reply. the fake
+# homeserver only relays the crypto artifacts (keys, to-device, room events) between the two clients.
+[package]
+name = "mxhelper"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "mxhelper"
+path = "src/main.rs"
+
+[dependencies]
+# match the bridge's matrix-sdk (0.18, e2e-encryption default) so both ends speak the same crypto.
+matrix-sdk = { version = "0.18.0", features = ["bundled-sqlite"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }

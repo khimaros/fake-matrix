@@ -1,0 +1,3 @@
+# deterministic rust toolchain for fake-matrix builds.
+[tools]
+rust = "1.95.0"
