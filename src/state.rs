@@ -18,6 +18,8 @@ use crate::config::Config;
 
 // the bot's whoami device id; matrix-sdk aborts if whoami returns none (e2e needs one).
 pub const BOT_DEVICE_ID: &str = "FAKEDEVICE";
+// the server name in the mxc uri of injected media.
+const MEDIA_SERVER: &str = "fake.local";
 pub const SUPPORTED_VERSIONS: &[&str] = &[
     "v1.1", "v1.2", "v1.3", "v1.4", "v1.5", "v1.6", "v1.7", "v1.8", "v1.9", "v1.10", "v1.11",
 ];
@@ -80,6 +82,16 @@ pub struct State {
     // the injection, so every later poll asks for events newer than it. waiting on this counter
     // is how a test knows the client has a token and is listening.
     syncs: Mutex<HashMap<String, u64>>,
+    // media a test injected with a message: id -> (mimetype, bytes), served by the download routes.
+    media: Mutex<HashMap<String, (String, Vec<u8>)>>,
+}
+
+// what an injected message carries when it is a file and not text.
+pub struct Media<'a> {
+    pub msgtype: &'a str,
+    pub filename: &'a str,
+    pub mimetype: &'a str,
+    pub bytes: Vec<u8>,
 }
 
 fn now_ms() -> u64 {
@@ -145,6 +157,7 @@ impl State {
             receipts: Mutex::new(Vec::new()),
             logins: Mutex::new(0),
             syncs: Mutex::new(HashMap::new()),
+            media: Mutex::new(HashMap::new()),
         }
     }
 
@@ -332,8 +345,19 @@ impl State {
         body: &str,
         formatted: Option<&str>,
         mentions: Option<&Value>,
+        media: Option<Media<'_>>,
     ) -> String {
         let mut content = json!({"msgtype": "m.text", "body": body});
+        // a media message: `body` is its caption when it differs from the filename (matrix v1.10).
+        if let Some(m) = media {
+            let mut store = self.media.lock().unwrap();
+            let id = format!("media{}", store.len() + 1);
+            content["msgtype"] = json!(m.msgtype);
+            content["filename"] = json!(m.filename);
+            content["url"] = json!(format!("mxc://{MEDIA_SERVER}/{id}"));
+            content["info"] = json!({"mimetype": m.mimetype, "size": m.bytes.len()});
+            store.insert(id, (m.mimetype.to_string(), m.bytes));
+        }
         if let Some(html) = formatted {
             content["format"] = json!("org.matrix.custom.html");
             content["formatted_body"] = json!(html);
@@ -366,6 +390,10 @@ impl State {
             body.len()
         ));
         event_id
+    }
+
+    pub fn media(&self, id: &str) -> Option<(String, Vec<u8>)> {
+        self.media.lock().unwrap().get(id).cloned()
     }
 
     pub fn sent_snapshot(&self) -> Vec<Value> {

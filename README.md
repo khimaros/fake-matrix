@@ -70,6 +70,8 @@ GET  /_matrix/client/v3/sync                   -> initial state + long-poll for 
 PUT  /_matrix/client/v3/rooms/{room}/send/{type}/{txn}   -> captures the send
 PUT  /_matrix/client/v3/rooms/{room}/typing/{user}
 GET  /_matrix/client/v3/rooms/{room}/members
+GET  /_matrix/client/v1/media/download/{server}/{id}     -> the bytes of injected media
+GET  /_matrix/media/v3/download/{server}/{id}            -> the same, at the older route
 ```
 
 any other matrix path returns an empty `200` so incidental sdk probes do not error.
@@ -80,6 +82,8 @@ how a test drives it (shares the server port):
 
 ```
 POST /_fake/inject   {room_id, sender, body}  -> queue an inbound m.text into a room
+                     + media: {msgtype, filename, mimetype, hex}
+                                              -> the message is that file, and body its caption
 GET  /_fake/sent                              -> [{room_id, type, msgtype, body, content}, ...]
 GET  /_fake/rooms                             -> the seeded rooms
 POST /_fake/reset                             -> clear the timeline + captures

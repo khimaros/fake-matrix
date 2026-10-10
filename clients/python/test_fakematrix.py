@@ -112,6 +112,23 @@ def main():
         check("the receipt names the event it acknowledges",
               any(r.get("event_id") == "$evt1" for r in got))
 
+        # a file: the event names where its bytes are, and the download route hands them back.
+        blob = bytes(range(256))
+        fake.inject(fakematrix.DM_ROOM, fakematrix.HUMAN, "what is this?",
+                    media=fakematrix.media("shot.png", "image/png", blob))
+        incr = http(base + "/_matrix/client/v3/sync?since=" + incr["next_batch"])
+        ev = ((incr.get("rooms", {}).get("join", {}).get(fakematrix.DM_ROOM, {})
+               .get("timeline", {}).get("events", []) or [{}])[0].get("content", {}))
+        check("a media injection is an m.image with its filename and caption",
+              (ev.get("msgtype"), ev.get("filename"), ev.get("body"))
+              == ("m.image", "shot.png", "what is this?"))
+        server, _, media_id = (ev.get("url") or "").removeprefix("mxc://").partition("/")
+        for route in (f"/_matrix/client/v1/media/download/{server}/{media_id}",
+                      f"/_matrix/media/v3/download/{server}/{media_id}"):
+            with urllib.request.urlopen(base + route, timeout=5) as r:
+                check(f"{route.split('/')[2]} download returns the bytes and their type",
+                      r.read() == blob and r.headers.get("Content-Type") == "image/png")
+
         fake.reset()
         check("reset clears captured sends", fake.sent() == [])
         check("reset clears captured receipts", fake.receipts() == [])

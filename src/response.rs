@@ -41,6 +41,7 @@ pub fn parse_request(req: &mut Request) -> ParsedRequest {
 pub struct HttpResponse {
     pub status: u16,
     pub body: Vec<u8>,
+    pub content_type: String,
 }
 
 impl HttpResponse {
@@ -48,6 +49,16 @@ impl HttpResponse {
         HttpResponse {
             status,
             body: value.to_string().into_bytes(),
+            content_type: CONTENT_TYPE_JSON.to_string(),
+        }
+    }
+
+    // stored media, served as the bytes and the type it was injected with.
+    pub fn bytes(content_type: &str, body: Vec<u8>) -> HttpResponse {
+        HttpResponse {
+            status: 200,
+            body,
+            content_type: content_type.to_string(),
         }
     }
 
@@ -60,9 +71,10 @@ impl HttpResponse {
 }
 
 pub fn write_response(req: Request, resp: HttpResponse) {
+    let content_type = resp.content_type;
     let mut out = Response::from_data(resp.body).with_status_code(resp.status);
     out.add_header(
-        Header::from_bytes(&b"Content-Type"[..], CONTENT_TYPE_JSON.as_bytes())
+        Header::from_bytes(&b"Content-Type"[..], content_type.as_bytes())
             .expect("valid header"),
     );
     // a client that hangs up mid-write is normal in tests; ignore the error.
@@ -89,6 +101,18 @@ pub fn percent_decode(s: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+// decode a hex string into bytes; none when it is not hex. how a test hands media to the admin
+// plane without this crate taking a base64 dependency.
+pub fn hex_decode(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    if b.len() % 2 != 0 {
+        return None;
+    }
+    b.chunks(2)
+        .map(|p| Some(hex_val(p[0])? * 16 + hex_val(p[1])?))
+        .collect()
 }
 
 fn hex_val(b: u8) -> Option<u8> {

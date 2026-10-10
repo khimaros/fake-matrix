@@ -70,8 +70,16 @@ def sent(admin_url):
     return _admin(admin_url, "/sent").get("sent", [])
 
 
-def inject(admin_url, room_id, sender, body, formatted_body=None, mentions=None):
-    """queue an inbound m.text event into a room's timeline; returns {ok, event_id}.
+def media(filename, mimetype, data, msgtype=None):
+    """the `media` of an inject: a file of `data` bytes. an image/* is sent as m.image, anything
+    else as m.file, unless `msgtype` says otherwise."""
+    kind = msgtype or ("m.image" if mimetype.startswith("image/") else "m.file")
+    return {"msgtype": kind, "filename": filename, "mimetype": mimetype, "hex": data.hex()}
+
+
+def inject(admin_url, room_id, sender, body, formatted_body=None, mentions=None, media=None):
+    """queue an inbound message into a room's timeline; returns {ok, event_id}. m.text, or a file
+    when `media` (see `media()`) is given: `body` is then its caption, or its filename for none.
 
     the event_id is what a REPLY to this message points at, so a test asserting that a bot
     answered a PARTICULAR message reads it from here rather than guessing the server's id format.
@@ -85,6 +93,8 @@ def inject(admin_url, room_id, sender, body, formatted_body=None, mentions=None)
         payload["formatted_body"] = formatted_body
     if mentions is not None:
         payload["mentions"] = mentions
+    if media is not None:
+        payload["media"] = media
     return _admin(admin_url, "/inject", "POST", payload)
 
 
@@ -234,8 +244,8 @@ class FakeMatrix:
     def sent(self):
         return sent(self.admin_url)
 
-    def inject(self, room_id, sender, body, formatted_body=None, mentions=None):
-        return inject(self.admin_url, room_id, sender, body, formatted_body, mentions)
+    def inject(self, room_id, sender, body, formatted_body=None, mentions=None, media=None):
+        return inject(self.admin_url, room_id, sender, body, formatted_body, mentions, media)
 
     def receipts(self):
         return receipts(self.admin_url)

@@ -1,12 +1,23 @@
 // the /_fake control plane a test drives: inject an inbound message, read the bot's
 // captured sends, list the seeded rooms, reset. mirrors fake-openai's /__admin.
 
-use serde_json::json;
+use serde_json::{json, Value};
 
-use crate::response::{HttpResponse, ParsedRequest};
-use crate::state::Shared;
+use crate::response::{hex_decode, HttpResponse, ParsedRequest};
+use crate::state::{Media, Shared};
 
 pub const PREFIX: &str = "/_fake";
+
+// the file an inject carries, when every part of it is there and its bytes are hex.
+fn media_of(v: &Value) -> Option<Media<'_>> {
+    let field = |k: &str| v.get(k).and_then(|x| x.as_str());
+    Some(Media {
+        msgtype: field("msgtype")?,
+        filename: field("filename")?,
+        mimetype: field("mimetype")?,
+        bytes: hex_decode(field("hex")?)?,
+    })
+}
 
 pub fn handle(state: &Shared, req: &ParsedRequest, path: &str) -> HttpResponse {
     let sub = &path[PREFIX.len()..];
@@ -32,10 +43,13 @@ pub fn handle(state: &Shared, req: &ParsedRequest, path: &str) -> HttpResponse {
             // its text alone, so who was addressed lives in formatted_body + m.mentions.
             let formatted = req.body.get("formatted_body").and_then(|v| v.as_str());
             let mentions = req.body.get("mentions");
+            // optional: the message is a file. {msgtype, filename, mimetype, hex}, and `body` is
+            // then its caption (or the filename again, for none).
+            let media = req.body.get("media").and_then(media_of);
             match (room_id, sender, body) {
                 (Some(r), Some(s), Some(b)) => {
                     // the event id comes back so a test can assert what a REPLY points at.
-                    let event_id = state.inject(r, s, b, formatted, mentions);
+                    let event_id = state.inject(r, s, b, formatted, mentions, media);
                     HttpResponse::json(200, &json!({"ok": true, "event_id": event_id}))
                 }
                 _ => HttpResponse::json(

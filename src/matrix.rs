@@ -90,6 +90,18 @@ pub fn handle(state: &Shared, req: &ParsedRequest, path: &str) -> HttpResponse {
             state.receipt(&req.token, room, rtype, event_id);
             HttpResponse::json(200, &json!({}))
         }
+        // injected media, at the authenticated route and the one it replaced, with or without the
+        // trailing filename a client may ask for.
+        ("GET", &["_matrix", "client", _v, "media", "download", _server, id])
+        | ("GET", &["_matrix", "client", _v, "media", "download", _server, id, _])
+        | ("GET", &["_matrix", "media", _v, "download", _server, id])
+        | ("GET", &["_matrix", "media", _v, "download", _server, id, _]) => match state.media(id) {
+            Some((mime, bytes)) => HttpResponse::bytes(&mime, bytes),
+            None => HttpResponse::json(
+                404,
+                &json!({"errcode": "M_NOT_FOUND", "error": "no such media"}),
+            ),
+        },
         // profile display name. a mention pill renders as this, so a bridge that strips mentions
         // reads it -- serving the bot's own tells a test the bot fetched it rather than guessed.
         ("GET", &["_matrix", "client", _v, "profile", user, "displayname"]) => HttpResponse::json(
